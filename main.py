@@ -1,80 +1,59 @@
 import socket
-from random import randint
 import time
+from random import randint
 import yaml
 
-def send_message(message, port):
-        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-            sock.sendto(message.encode(), ("localhost", port))
+def send_message(msg, port):
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+        s.sendto(msg.encode(), ("localhost", port))
 
 def await_reply(sock):
     sock.settimeout(1)
     while True:
         try:
-            message, _ = sock.recvfrom(1024)
-            msg_parts = message.decode().split('-')
-            type = msg_parts[0]
-            port = int(msg_parts[1])
-            key = msg_parts[2]
-
-            if msg_parts[3] != 'None':
-                return int(msg_parts[3])
-            else:
-                return None
-
+            msg, _ = sock.recvfrom(1024)
+            parts = msg.decode().split('-')
+            value = parts[3]
+            return None if value == "None" else int(value)
         except socket.timeout:
-            pass
+            continue
 
+def choose_random_port(port_list):
+    return port_list[randint(0, len(port_list) - 1)]
 
 if __name__ == "__main__":
-    with open("config.yml", "r") as file:
-        config = yaml.load(file, Loader=yaml.FullLoader)
+    cfg = yaml.load(open("config.yml"), Loader=yaml.FullLoader)
+    main_port = cfg["Main"]["port"]
 
-    port = config["Main"]["port"]
-    main_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    main_socket.bind(("0.0.0.0", port))
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.bind(("0.0.0.0", main_port))
 
-    layer_ports = []
-    for layer_name, layer_data in config["Layers"].items():
-        ports = [node["port"] for node in layer_data.values()]
-        layer_ports.append(ports)
+    layers = [[node["port"] for node in layer.values()] for layer in cfg["Layers"].values()]
 
-    with open("transactions.txt", "r") as file:
-        lines = file.readlines()
-        lines = [line.strip() for line in lines]    
-
-        for line in lines:
+    with open("transactions.txt") as f:
+        for line in f.read().splitlines():
             parts = line.split(', ')
 
             if parts[0] == 'b':
-                for part in parts[1:]:
-                    if part[0] == 'w':
-                        key, value = part[2:].replace(')', '').split(',')
-                        send_message(f"WRITE-{port}-{key}-{value}", layer_ports[0][randint(0, len(layer_ports[0]) - 1)])
-                        reply = await_reply(main_socket)
-                        print(f"write successful")
-                    elif part[0] == 'r': 
-                        key= part[2:].replace(')', '')
-                        send_message(f"READ-{port}-{key}-0", layer_ports[0][randint(0, len(layer_ports[0]) - 1)])
-                        reply = await_reply(main_socket)
-                        if reply == None:
-                            print(f"Error: no value doun with key {key}.")
-                        else:
-                            print(f"read: {reply}")
-                    else:
-                        break
+                for op in parts[1:]:
+                    if op.startswith('w'):
+                        key, val = op[2:].rstrip(')').split(',')
+                        send_message(f"WRITE-{main_port}-{key}-{val}", choose_random_port(layers[0]))
+                        await_reply(sock)
+                        print("write successful")
+                    elif op.startswith('r'):
+                        key = op[2:].rstrip(')')
+                        send_message(f"READ-{main_port}-{key}-0", choose_random_port(layers[0]))
+                        value = await_reply(sock)
+                        print(f"read: {value}" if value is not None else f"Error: no value found for {key}")
                     time.sleep(2)
             else:
-                layer = parts[0][1]
-                for part in parts[1:]:
-                    if part[0] != 'c': 
-                        key= part[2:].replace(')', '')
-                        send_message(f"READ-{port}-{key}-0", layer_ports[int(layer)][randint(0, len(layer_ports[int(layer)]) - 1)])
-                        reply = await_reply(main_socket)
-                        if reply == None:
-                            print(f"Error: no value doun with key {key}.")
-                        else:
-                            print(f"read: {reply}")
-                    time.sleep(2)                 
-            
-            
+                layer = int(parts[0][1])
+                for op in parts[1:]:
+                    if op.startswith('c'):
+                        continue
+                    key = op[2:].rstrip(')')
+                    send_message(f"READ-{main_port}-{key}-0", choose_random_port(layers[layer]))
+                    value = await_reply(sock)
+                    print(f"read: {value}" if value is not None else f"Error: no value found for {key}")
+                    time.sleep(2)

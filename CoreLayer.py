@@ -1,171 +1,151 @@
-from common import *
+import asyncio
+import os
 import socket
-import time
 import threading
+import time
 from queue import Queue
 import yaml
 import sys
-import asyncio
-import os
 from websockets.asyncio.server import serve
+from common import send_message, update, read, send_updates, update_log, read_all
 
 event = asyncio.Event()
-data_file = None
+
 
 class CoreLayer:
 
-    def __init__(self, port, id, peers, children):
+    def __init__(self, port, node_id, peers, children):
         self.port = port
-        self.id = id
+        self.id = node_id
         self.peers = peers
         self.children = children
+
         self.queue = Queue()
         self.lock = threading.Lock()
-        self.num_acks = 0
+        self.pending_acks = 0
         self.required_acks = 0
-        self.num_updates = 0
+        self.update_counter = 0
 
         # Ensure required directories exist
         os.makedirs("logs", exist_ok=True)
         os.makedirs("data", exist_ok=True)
 
         self.log_file = f"logs/A{self.id}.txt"
-        with open(self.log_file, "w") as file:
-            pass
+        self.data_file = f"data/A{self.id}.json"
 
-        global data_file
-        data_file = f"data/A{self.id}.json"
-
-        self.data_file = data_file
-        with open(self.data_file, "w") as file:
-            pass
+        open(self.log_file, "w").close()
+        open(self.data_file, "w").close()
 
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.socket.bind(("0.0.0.0", self.port))
 
         threading.Thread(target=self.listen, daemon=True).start()
-        threading.Thread(target=self.handle_transactions, daemon=True).start()
+        threading.Thread(target=self.process_messages, daemon=True).start()
 
     def listen(self):
         self.socket.settimeout(1)
         while True:
             try:
-                message, _ = self.socket.recvfrom(1024)
-                msg = message.decode()
-                msg_parts = msg.split('-')
-                type = msg_parts[0]
+                msg, _ = self.socket.recvfrom(1024)
+                parts = msg.decode().split('-')
+                msg_type = parts[0]
 
-                print(msg)
-                
-                if type == "WRITE":
+                print(msg.decode())
+
+                if msg_type in {"WRITE", "READ", "UPDATE"}:
+                    self.queue.put(parts)
+                elif msg_type == "READ":
                     self.queue.put(msg)
-                elif type == "READ":
+                elif msg_type == "UPDATE":
                     self.queue.put(msg)
-                elif type == "UPDATE":
-                    self.queue.put(msg)
-                elif type == "ACK":
+                elif msg_type == "ACK":
                     with self.lock:
-                        self.num_acks+=1
+                        self.pending_acks += 1
 
             except socket.timeout:
                 pass
 
-    def handle_transactions(self):
+    def process_messages(self):
         while True:
-            if not self.queue.empty():
-                message = self.queue.get()
-                msg_parts = message.split('-')
-                type = msg_parts[0]
-                port = int(msg_parts[1])
-                key = msg_parts[2]
-                value = int(msg_parts[3])
+            if self.queue.empty():
+                continue
 
-                if type == "WRITE":
-                    
-                    update(self.data_file, key, value)
-                    update_log(self.data_file, self.log_file, type)
-                    event.set()
+            parts = self.queue.get()
+            msg_type, src_port, key, value = parts[0], int(parts[1]), parts[2], int(parts[3])
 
-                    for peer in self.peers:
-                        send_message(f"UPDATE-{self.port}-{key}-{value}", peer)
-                        self.required_acks+=1
+            if msg_type == "WRITE":
+                self.handle_write(src_port, key, value)
 
-                    while True:
-                        time.sleep(0.001)
-                        with self.lock:
-                            if self.num_acks == self.required_acks: 
-                                break
+            elif msg_type == "READ":
+                value = read(self.data_file, key)
+                send_message(f"REPLY-{self.port}-{key}-{value}", src_port)
 
-                    self.num_acks = 0
-                    self.required_acks = 0
+            elif msg_type == "UPDATE":
+                self.handle_update(src_port, key, value)
 
-                    self.num_updates+=1
-    
-                    if self.num_updates == 10:
-                        self.num_updates = 0
-                        for child in self.children:
-                            send_updates(self.data_file, child)
+    def handle_write(self, client_port, key, value):
+        update(self.data_file, key, value)
+        update_log(self.data_file, self.log_file, "WRITE")
+        event.set()
 
-                    send_message(f"REPLY-{self.port}-1-1", port)
+        self.required_acks = len(self.peers)
+        self.pending_acks = 0
 
-                elif type == "READ":
+        for peer in self.peers:
+            send_message(f"UPDATE-{self.port}-{key}-{value}", peer)
 
-                    value_read = read(self.data_file, key)
-                    send_message(f"REPLY-{self.port}-{key}-{value_read}", port)
+        while True:
+            time.sleep(0.001)
+            with self.lock:
+                if self.pending_acks >= self.required_acks:
+                    break
 
-            
-                elif type == "UPDATE":
-                    
-                    update(self.data_file, key, value)
-                    update_log(self.data_file, self.log_file, type)
-                    event.set()
+        self.update_counter += 1
+        if self.update_counter >= 10:
+            self.update_counter = 0
+            for child in self.children:
+                send_updates(self.data_file, child)
 
-                    self.num_updates+=1
-    
-                    if self.num_updates == 10:
-                        self.num_updates = 0
-                        for child in self.children:
-                            send_updates(self.data_file, child)
-                    
-                    send_message(f"ACK-{self.port}-1-1", port)
+        send_message(f"REPLY-{self.port}-1-1", client_port)
 
-async def update_websocket(websocket):
+    def handle_update(self, src_port, key, value):
+        update(self.data_file, key, value)
+        update_log(self.data_file, self.log_file, "UPDATE")
+        event.set()
 
+        self.update_counter += 1
+        if self.update_counter >= 10:
+            self.update_counter = 0
+            for child in self.children:
+                send_updates(self.data_file, child)
+
+        send_message(f"ACK-{self.port}-1-1", src_port)
+
+
+async def websocket_handler(ws):
     while True:
         if event.is_set():
-            
-            global data_file
-            data = read_all(data_file)
-            await websocket.send(f"{data}")
-
+            await ws.send(read_all(global_data_file))
             event.clear()
         else:
             await asyncio.sleep(0.001)
 
 
 async def start_websocket(port):
-    async with serve(update_websocket, "localhost", port) as server:
-        try:
-            await asyncio.Future()  
-        except asyncio.CancelledError:  
-            pass 
+    async with serve(websocket_handler, "localhost", port):
+        await asyncio.Future()
+
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
         print("Usage: python3 CoreLayer.py <node_id>")
         sys.exit(1)
 
-    with open("config.yml", "r") as file:
-        config = yaml.load(file, Loader=yaml.FullLoader)["Layers"]["CoreLayer"][f"a{sys.argv[1]}"]
+    cfg = yaml.load(open("config.yml"), Loader=yaml.FullLoader)
+    node_cfg = cfg["Layers"]["CoreLayer"][f"a{sys.argv[1]}"]
 
-    node = CoreLayer(
-        config["port"], 
-        sys.argv[1], 
-        config["peers"], 
-        config["children"]
-    )
+    global global_data_file
+    global_data_file = f"data/A{sys.argv[1]}.json"
 
-    try:
-        asyncio.run(start_websocket(config["web"]))
-    except KeyboardInterrupt:
-        pass
+    CoreLayer(node_cfg["port"], sys.argv[1], node_cfg["peers"], node_cfg["children"])
+    asyncio.run(start_websocket(node_cfg["web"]))
