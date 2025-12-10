@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Real Time Data Update</title>
+  <style>
+    body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        height: 100vh;
+        background-color: #f4f4f9;
+    }
+
+    header {
+        background-color: #4CAF50;
+        color: white;
+        padding: 20px;
+        width: 100%;
+        text-align: center;
+    }
+
+    .content {
+        display: flex;
+        justify-content: space-around;
+        width: 100%;
+        margin-top: 20px;
+    }
+
+    .column {
+        text-align: center;
+        width: 30%;
+        background-color: #fff;
+        padding: 10px;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .data {
+        text-align: left;
+        width: 90%; 
+        margin: 0 auto; 
+        background-color: #fff;
+        padding: 10px;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    }
+
+    h2 {
+        font-size: 20px;
+        color: #333;
+    }
+
+    .row {
+        margin: 10px 0;
+    }
+  </style>
+  <script>
+
+    function formatEventData(data) {
+        // Parse the JSON string into an object
+        const parsedData = JSON.parse(data);
+
+        // Create an array of key-value pairs and join them with newlines
+        return Object.entries(parsedData)
+            .map(([key, value]) => `${key}: ${value}`)
+            .join('\n');
+    }
+
+    const a1Port = 5100;
+    const a2Port = 5101;
+    const a3Port = 5102;
+    const b1Port = 6100;
+    const b2Port = 6101;
+    const c1Port = 7100;
+    const c2Port = 7101;
+
+    // WebSocket for a1
+    const a1_socket = new WebSocket('ws://localhost:'+a1Port);
+    a1_socket.onmessage = function(event) {
+        const div = document.getElementById('a1_data');
+        div.innerText = `${formatEventData(event.data)}`;
+    };
+
+    // WebSocket for a2
+    const a2_socket = new WebSocket('ws://localhost:'+a2Port);
+    a2_socket.onmessage = function(event) {
+        const div = document.getElementById('a2_data');
+        div.innerText = `${formatEventData(event.data)}`;
+    };
+
+    // WebSocket for a3
+    const a3_socket = new WebSocket('ws://localhost:'+a3Port);
+    a3_socket.onmessage = function(event) {
+        const div = document.getElementById('a3_data');
+        div.innerText = `${formatEventData(event.data)}`;
+    };
+
+    // WebSocket for b1
+    const b1_socket = new WebSocket('ws://localhost:'+b1Port);
+    b1_socket.onmessage = function(event) {
+        const div = document.getElementById('b1_data');
+        div.innerText = `${formatEventData(event.data)}`;
+    };
+
+    // WebSocket for b2
+    const b2_socket = new WebSocket('ws://localhost:'+b2Port);
+    b2_socket.onmessage = function(event) {
+        const div = document.getElementById('b2_data');
+        div.innerText = `${formatEventData(event.data)}`;
+    };
+
+    // WebSocket for c1
+    const c1_socket = new WebSocket('ws://localhost:'+c1Port);
+    c1_socket.onmessage = function(event) {
+        const div = document.getElementById('c1_data');
+        div.innerText = `${formatEventData(event.data)}`;
+    };
+
+    // WebSocket for c2
+    const c2_socket = new WebSocket('ws://localhost:'+c2Port);
+    c2_socket.onmessage = function(event) {
+        const div = document.getElementById('c2_data');
+        div.innerText = `${formatEventData(event.data)}`;
+    };
+
+  </script>
+</head>
+<body>
+  <header>
+    <h1>Real Time Data Update</h1>
+  </header>
+
+  <div class="content">
+    <div class="column">
+      <div class="row"><h2>A1</h2>
+        <div class="data" id="a1_data"><p>Empty</p></div></div>
+      <div class="row"><h2>A2</h2>
+        <div class="data" id="a2_data"><p>Empty</p></div></div>
+      <div class="row"><h2>A3</h2>
+        <div class="data" id="a3_data"><p>Empty</p></div></div>
+    </div>
+
+    <div class="column">
+      <div class="row"><h2>B1</h2>
+        <div class="data" id="b1_data"><p>Empty</p></div></div>
+      <div class="row"><h2>B2</h2>
+        <div class="data" id="b2_data"><p>Empty</p></div></div>
+    </div>
+
+    <div class="column">
+      <div class="row"><h2>C1</h2>
+        <div class="data" id="c1_data"><p>Empty</p></div></div>
+      <div class="row"><h2>C2</h2>
+        <div class="data" id="c2_data"><p>Empty</p></div></div>
+    </div>
+  </div>
+</body>
+</html>

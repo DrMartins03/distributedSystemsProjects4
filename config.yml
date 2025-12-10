@@ -1,0 +1,37 @@
+Main:
+  port: 4000
+Layers:
+  CoreLayer:
+    a1:
+      port: 5000
+      web: 5100
+      peers: [5001, 5002]
+      children: []
+    a2:
+      port: 5001
+      web: 5101
+      peers: [5000, 5002]
+      children: [6000]
+    a3:
+      port: 5002
+      web: 5102
+      peers: [5000, 5001]
+      children: [6001]
+  FirstLayer:
+    b1:
+      port: 6000
+      web: 6100
+      children: []
+    b2:
+      port: 6001
+      web: 6101
+      children: [7000, 7001]
+  SecondLayer:
+    c1:
+      port: 7000
+      web: 7100
+    c2:
+      port: 7001
+      web: 7101
+
+  
