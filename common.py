@@ -18,10 +18,9 @@ def _save_json(filename, data):
         json.dump(data, f, indent=4)
 
 
-# Messages
-def send_message(message, port):
-    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-        sock.sendto(message.encode(), ("localhost", port))
+def send_updates(filename, port):
+    data = _load_json(filename)
+    send_message(f"UPDATE-{data}", port)
 
 
 def update(filename, key, value):
@@ -30,24 +29,25 @@ def update(filename, key, value):
     _save_json(filename, data)
 
 
-def read(filename, key):
-    return _load_json(filename).get(key)
-
-
-def send_updates(filename, port):
-    data = _load_json(filename)
-    send_message(f"UPDATE-{data}", port)
-
-
 def update_all(filename, data):
     _save_json(filename, data)
+
+
+def read(filename, key):
+    return _load_json(filename).get(key)
 
 
 def read_all(filename):
     return json.dumps(_load_json(filename), indent=4)
 
 
-def update_log(data_file, log_file, op):
+# Messages
+def send_message(message, port):
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        sock.sendto(message.encode(), ("localhost", port))
+
+
+def record_version_change(data_file, log_file, op):
     data = _load_json(data_file)
 
     try:

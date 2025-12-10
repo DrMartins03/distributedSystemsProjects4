@@ -7,7 +7,7 @@ from queue import Queue
 import yaml
 import sys
 from websockets.asyncio.server import serve
-from common import send_message, update, read, send_updates, update_log, read_all
+from common import send_message, update, read, send_updates, record_version_change, read_all
 
 event = asyncio.Event()
 
@@ -39,10 +39,10 @@ class CoreLayer:
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.socket.bind(("0.0.0.0", self.port))
 
-        threading.Thread(target=self.listen, daemon=True).start()
+        threading.Thread(target=self.receive_loop, daemon=True).start()
         threading.Thread(target=self.process_messages, daemon=True).start()
 
-    def listen(self):
+    def receive_loop(self):
         self.socket.settimeout(1)
         while True:
             try:
@@ -74,18 +74,18 @@ class CoreLayer:
             msg_type, src_port, key, value = parts[0], int(parts[1]), parts[2], int(parts[3])
 
             if msg_type == "WRITE":
-                self.handle_write(src_port, key, value)
+                self.process_client_update(src_port, key, value)
 
             elif msg_type == "READ":
                 value = read(self.data_file, key)
                 send_message(f"REPLY-{self.port}-{key}-{value}", src_port)
 
             elif msg_type == "UPDATE":
-                self.handle_update(src_port, key, value)
+                self.process_peer_update(src_port, key, value)
 
-    def handle_write(self, client_port, key, value):
+    def process_client_update(self, client_port, key, value):
         update(self.data_file, key, value)
-        update_log(self.data_file, self.log_file, "WRITE")
+        record_version_change(self.data_file, self.log_file, "WRITE")
         event.set()
 
         self.required_acks = len(self.peers)
@@ -108,9 +108,9 @@ class CoreLayer:
 
         send_message(f"REPLY-{self.port}-1-1", client_port)
 
-    def handle_update(self, src_port, key, value):
+    def process_peer_update(self, src_port, key, value):
         update(self.data_file, key, value)
-        update_log(self.data_file, self.log_file, "UPDATE")
+        record_version_change(self.data_file, self.log_file, "UPDATE")
         event.set()
 
         self.update_counter += 1

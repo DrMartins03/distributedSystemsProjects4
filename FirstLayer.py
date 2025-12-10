@@ -6,7 +6,7 @@ import time
 import yaml
 import sys
 from websockets.asyncio.server import serve
-from common import read, update_all, update_log, send_message, read_all, send_updates
+from common import read, update_all, record_version_change, send_message, read_all, send_updates
 
 event = asyncio.Event()
 
@@ -25,10 +25,10 @@ class FirstLayer:
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.socket.bind(("0.0.0.0", self.port))
 
-        threading.Thread(target=self.listen, daemon=True).start()
+        threading.Thread(target=self.receive_loop, daemon=True).start()
         threading.Thread(target=self.propagate_updates, daemon=True).start()
 
-    def listen(self):
+    def receive_loop(self):
         self.socket.settimeout(1)
         while True:
             try:
@@ -39,18 +39,18 @@ class FirstLayer:
                 print(msg.decode())
 
                 if msg_type == "READ":
-                    self.handle_read(int(parts[1]), parts[2])
+                    self.read_request(int(parts[1]), parts[2])
 
                 elif msg_type == "UPDATE":
                     data = json.loads(parts[1].replace("'", '"'))
                     update_all(self.data_file, data)
-                    update_log(self.data_file, self.log_file, "UPDATE")
+                    record_version_change(self.data_file, self.log_file, "UPDATE")
                     event.set()
 
             except socket.timeout:
                 continue
 
-    def handle_read(self, client_port, key):
+    def read_request(self, client_port, key):
         value = read(self.data_file, key)
         send_message(f"REPLY-{self.port}-{key}-{value}", client_port)
 

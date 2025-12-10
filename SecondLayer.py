@@ -5,7 +5,7 @@ import threading
 import yaml
 import sys
 from websockets.asyncio.server import serve
-from common import read, update_all, update_log, send_message, read_all
+from common import read, update_all, record_version_change, send_message, read_all
 
 event = asyncio.Event()
 
@@ -23,9 +23,9 @@ class SecondLayer:
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.socket.bind(("0.0.0.0", self.port))
 
-        threading.Thread(target=self.listen, daemon=True).start()
+        threading.Thread(target=self.receive_loop, daemon=True).start()
 
-    def listen(self):
+    def receive_loop(self):
         self.socket.settimeout(1)
         while True:
             try:
@@ -43,7 +43,7 @@ class SecondLayer:
                 elif msg_type == "UPDATE":
                     data = json.loads(parts[1].replace("'", '"'))
                     update_all(self.data_file, data)
-                    update_log(self.data_file, self.log_file, "UPDATE")
+                    record_version_change(self.data_file, self.log_file, "UPDATE")
                     event.set()
 
             except socket.timeout:

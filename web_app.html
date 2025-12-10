@@ -1,163 +1,196 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Real Time Data Update</title>
-  <style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Replica State Dashboard</title>
+
+<style>
     body {
-        font-family: Arial, sans-serif;
         margin: 0;
-        padding: 0;
+        background: #eef0f5;
+        font-family: Arial, sans-serif;
         display: flex;
         flex-direction: column;
-        align-items: center;
         height: 100vh;
-        background-color: #f4f4f9;
     }
 
     header {
-        background-color: #4CAF50;
+        background: #2d6cdf;
         color: white;
-        padding: 20px;
-        width: 100%;
+        padding: 24px;
+        font-size: 26px;
         text-align: center;
+        font-weight: bold;
+        letter-spacing: 1px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.25);
     }
 
-    .content {
+    /* 🔥 THE IMPORTANT PART → fixed three-column layout */
+    .columns {
         display: flex;
-        justify-content: space-around;
         width: 100%;
-        margin-top: 20px;
+        height: 100%;
+        overflow-y: auto;
     }
 
-    .column {
+    .layer {
+        width: 33.3333%;   /* Force EXACT three columns */
+        padding: 20px;
+        box-sizing: border-box;
+        border-right: 1px solid #ccc;
+    }
+
+    .layer:last-child {
+        border-right: none;
+    }
+
+    .layer-title {
+        font-size: 22px;
+        margin-bottom: 18px;
+        font-weight: bold;
+        color: #1f2937;
         text-align: center;
-        width: 30%;
-        background-color: #fff;
+        padding-bottom: 8px;
+        border-bottom: 2px solid #d1d5db;
+    }
+
+    .node-card {
+        background: #ffffff;
+        border-radius: 10px;
+        border: 1px solid #d1d5db;
+        padding: 14px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+        transition: transform 0.15s;
+    }
+
+    .node-card:hover {
+        transform: scale(1.02);
+    }
+
+    .node-title {
+        font-size: 18px;
+        font-weight: bold;
+        text-align: center;
+        color: #374151;
+        margin-bottom: 10px;
+    }
+
+    .node-content {
+        background: #f9fafb;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
         padding: 10px;
-        border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        min-height: 70px;
+        white-space: pre-wrap;
+        font-family: monospace;
+        font-size: 14px;
+    }
+</style>
+
+<script>
+    function formatJSON(data) {
+        try {
+            const obj = JSON.parse(data);
+            return Object.entries(obj)
+                .map(([k, v]) => `${k}: ${v}`)
+                .join("\n");
+        } catch {
+            return "Invalid JSON";
+        }
     }
 
-    .data {
-        text-align: left;
-        width: 90%; 
-        margin: 0 auto; 
-        background-color: #fff;
-        padding: 10px;
-        border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-    }
-
-    h2 {
-        font-size: 20px;
-        color: #333;
-    }
-
-    .row {
-        margin: 10px 0;
-    }
-  </style>
-  <script>
-
-    function formatEventData(data) {
-        // Parse the JSON string into an object
-        const parsedData = JSON.parse(data);
-
-        // Create an array of key-value pairs and join them with newlines
-        return Object.entries(parsedData)
-            .map(([key, value]) => `${key}: ${value}`)
-            .join('\n');
-    }
-
-    const a1Port = 5100;
-    const a2Port = 5101;
-    const a3Port = 5102;
-    const b1Port = 6100;
-    const b2Port = 6101;
-    const c1Port = 7100;
-    const c2Port = 7101;
-
-    // WebSocket for a1
-    const a1_socket = new WebSocket('ws://localhost:'+a1Port);
-    a1_socket.onmessage = function(event) {
-        const div = document.getElementById('a1_data');
-        div.innerText = `${formatEventData(event.data)}`;
+    const layers = {
+        A: [
+            { id: "A1", port: 5100 },
+            { id: "A2", port: 5101 },
+            { id: "A3", port: 5102 }
+        ],
+        B: [
+            { id: "B1", port: 6100 },
+            { id: "B2", port: 6101 }
+        ],
+        C: [
+            { id: "C1", port: 7100 },
+            { id: "C2", port: 7101 }
+        ]
     };
 
-    // WebSocket for a2
-    const a2_socket = new WebSocket('ws://localhost:'+a2Port);
-    a2_socket.onmessage = function(event) {
-        const div = document.getElementById('a2_data');
-        div.innerText = `${formatEventData(event.data)}`;
-    };
+    window.onload = () => {
+        Object.values(layers).flat().forEach(node => {
+            const ws = new WebSocket(`ws://localhost:${node.port}`);
 
-    // WebSocket for a3
-    const a3_socket = new WebSocket('ws://localhost:'+a3Port);
-    a3_socket.onmessage = function(event) {
-        const div = document.getElementById('a3_data');
-        div.innerText = `${formatEventData(event.data)}`;
-    };
+            ws.onmessage = evt => {
+                document.getElementById(`data_${node.id}`).textContent =
+                    formatJSON(evt.data);
+            };
 
-    // WebSocket for b1
-    const b1_socket = new WebSocket('ws://localhost:'+b1Port);
-    b1_socket.onmessage = function(event) {
-        const div = document.getElementById('b1_data');
-        div.innerText = `${formatEventData(event.data)}`;
+            ws.onerror = () => {
+                document.getElementById(`data_${node.id}`).textContent =
+                    "Connection error";
+            };
+        });
     };
-
-    // WebSocket for b2
-    const b2_socket = new WebSocket('ws://localhost:'+b2Port);
-    b2_socket.onmessage = function(event) {
-        const div = document.getElementById('b2_data');
-        div.innerText = `${formatEventData(event.data)}`;
-    };
-
-    // WebSocket for c1
-    const c1_socket = new WebSocket('ws://localhost:'+c1Port);
-    c1_socket.onmessage = function(event) {
-        const div = document.getElementById('c1_data');
-        div.innerText = `${formatEventData(event.data)}`;
-    };
-
-    // WebSocket for c2
-    const c2_socket = new WebSocket('ws://localhost:'+c2Port);
-    c2_socket.onmessage = function(event) {
-        const div = document.getElementById('c2_data');
-        div.innerText = `${formatEventData(event.data)}`;
-    };
-
-  </script>
+</script>
 </head>
+
 <body>
-  <header>
-    <h1>Real Time Data Update</h1>
-  </header>
+<header>Distributed Replica State Dashboard</header>
 
-  <div class="content">
-    <div class="column">
-      <div class="row"><h2>A1</h2>
-        <div class="data" id="a1_data"><p>Empty</p></div></div>
-      <div class="row"><h2>A2</h2>
-        <div class="data" id="a2_data"><p>Empty</p></div></div>
-      <div class="row"><h2>A3</h2>
-        <div class="data" id="a3_data"><p>Empty</p></div></div>
+<div class="columns">
+
+    <!-- CORE LAYER -->
+    <div class="layer">
+        <div class="layer-title">Core Layer (A)</div>
+
+        <div class="node-card">
+            <div class="node-title">A1</div>
+            <div class="node-content" id="data_A1">Waiting…</div>
+        </div>
+
+        <div class="node-card">
+            <div class="node-title">A2</div>
+            <div class="node-content" id="data_A2">Waiting…</div>
+        </div>
+
+        <div class="node-card">
+            <div class="node-title">A3</div>
+            <div class="node-content" id="data_A3">Waiting…</div>
+        </div>
     </div>
 
-    <div class="column">
-      <div class="row"><h2>B1</h2>
-        <div class="data" id="b1_data"><p>Empty</p></div></div>
-      <div class="row"><h2>B2</h2>
-        <div class="data" id="b2_data"><p>Empty</p></div></div>
+    <!-- FIRST LAYER -->
+    <div class="layer">
+        <div class="layer-title">First Layer (B)</div>
+
+        <div class="node-card">
+            <div class="node-title">B1</div>
+            <div class="node-content" id="data_B1">Waiting…</div>
+        </div>
+
+        <div class="node-card">
+            <div class="node-title">B2</div>
+            <div class="node-content" id="data_B2">Waiting…</div>
+        </div>
     </div>
 
-    <div class="column">
-      <div class="row"><h2>C1</h2>
-        <div class="data" id="c1_data"><p>Empty</p></div></div>
-      <div class="row"><h2>C2</h2>
-        <div class="data" id="c2_data"><p>Empty</p></div></div>
+    <!-- SECOND LAYER -->
+    <div class="layer">
+        <div class="layer-title">Second Layer (C)</div>
+
+        <div class="node-card">
+            <div class="node-title">C1</div>
+            <div class="node-content" id="data_C1">Waiting…</div>
+        </div>
+
+        <div class="node-card">
+            <div class="node-title">C2</div>
+            <div class="node-content" id="data_C2">Waiting…</div>
+        </div>
     </div>
-  </div>
+
+</div>
+
 </body>
 </html>
