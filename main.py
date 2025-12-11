@@ -34,7 +34,7 @@ if __name__ == "__main__":
 
     layers = [[node["port"] for node in layer.values()] for layer in cfg["Layers"].values()]
 
-    with open("transactions.txt") as f:
+    with open("clientRequests.txt") as f:
         for line in f.read().splitlines():
             parts = line.split(', ')
 
